@@ -90,17 +90,25 @@ def process_file(filepath, device):
              print(f"⚠️ {stem_name} のサンプリングレートが異なります。")
              continue
              
-        # ===== 音量の統計情報を計算・表示 (絶対値を使用) =====
+        # ===== 音量の統計情報を計算・表示 (絶対値・相対ボリューム考慮) =====
         # 音声波形はプラス・マイナスに振れるため、音量(振幅)の平均は絶対値(abs)で計算します
         abs_audio = np.abs(audio_data)
-        max_vol = np.max(abs_audio)
-        min_vol = np.min(abs_audio) # 完全な無音なら0
-        avg_vol = np.mean(abs_audio)
         
-        print(f"  [{stem_name}] 音量 -> 最大: {max_vol:.5f}, 最小: {min_vol:.5f}, 平均(絶対値): {avg_vol:.5f}")
+        # オリジナルの音量
+        raw_max = np.max(abs_audio)
+        raw_min = np.min(abs_audio)
+        raw_avg = np.mean(abs_audio)
+        
+        # 相対ボリューム乗算後の音量（想定出力）
+        scaled_max = raw_max * rel_vol
+        scaled_min = raw_min * rel_vol
+        scaled_avg = raw_avg * rel_vol
+        
+        print(f"  [{stem_name}] 音量(元データ) -> 最大: {raw_max:.5f}, 最小: {raw_min:.5f}, 平均: {raw_avg:.5f}")
+        print(f"  [{stem_name}] 音量( x{rel_vol} ) -> 最大: {scaled_max:.5f}, 最小: {scaled_min:.5f}, 平均: {scaled_avg:.5f}")
         
         # 相対ボリュームを乗算してミックス
-        print(f"  - {stem_name} 波形を合成中 (Volume: x{rel_vol})")
+        print(f"  - {stem_name} 波形を合成中...")
         mixed_audio += audio_data * rel_vol
         
     if mixed_audio is not None:
