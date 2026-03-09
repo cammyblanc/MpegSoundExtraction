@@ -90,6 +90,15 @@ def process_file(filepath, device):
              print(f"⚠️ {stem_name} のサンプリングレートが異なります。")
              continue
              
+        # ===== 音量の統計情報を計算・表示 (絶対値を使用) =====
+        # 音声波形はプラス・マイナスに振れるため、音量(振幅)の平均は絶対値(abs)で計算します
+        abs_audio = np.abs(audio_data)
+        max_vol = np.max(abs_audio)
+        min_vol = np.min(abs_audio) # 完全な無音なら0
+        avg_vol = np.mean(abs_audio)
+        
+        print(f"  [{stem_name}] 音量 -> 最大: {max_vol:.5f}, 最小: {min_vol:.5f}, 平均(絶対値): {avg_vol:.5f}")
+        
         # 相対ボリュームを乗算してミックス
         print(f"  - {stem_name} 波形を合成中 (Volume: x{rel_vol})")
         mixed_audio += audio_data * rel_vol
@@ -143,8 +152,14 @@ def main():
     for ext in SUPPORTED_EXTENSIONS:
         # 大文字小文字を区別せず検索するため、os.listdirでマッチングさせる方が確実ですが
         # Windowsのglobは大文字小文字を区別しません
-        target_files.extend(glob.glob(ext))
-        
+        for f in glob.glob(ext):
+            # このスクリプトが作成したファイルは処理対象から除外する
+            if "_final_mix.wav" in f or "_SoundMixed" in f:
+                continue
+            # 重複を防ぐ
+            if f not in target_files:
+                target_files.append(f)
+                
     if not target_files:
         print("📁 カレントディレクトリに処理対象の動画・音声ファイルが見つかりません。")
         print("   Mpegファイル等をこのスクリプトと同じフォルダに置いてください。")
