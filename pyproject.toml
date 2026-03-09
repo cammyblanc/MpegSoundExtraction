@@ -1,0 +1,22 @@
+[project]
+name = "mpeg-sound-extraction"
+version = "0.1.0"
+description = "Extract and separate audio stems with Demucs and mix them with relative volumes."
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "demucs>=4.0.0",
+    "soundfile>=0.12.1",
+    "numpy",
+    "torch",
+    "torchaudio"
+]
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
+torchaudio = { index = "pytorch" }
