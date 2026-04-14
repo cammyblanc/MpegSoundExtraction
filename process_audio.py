@@ -4,6 +4,7 @@ import subprocess
 import soundfile as sf
 import numpy as np
 import torch
+from audio_separator.separator import Separator
 
 # ============== 設定 (Configuration) ==============
 # 各楽器の相対ボリューム（1.0を基準とする）
@@ -35,7 +36,7 @@ def check_ffmpeg():
         subprocess.run(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return True
     except FileNotFoundError:
-        print("❌ エラー: 'ffmpeg' コマンドが見つかりません。Demucsの実行にはffmpegが必要です。")
+        print("❌ エラー: 'ffmpeg' コマンドが見つかりません。実行にはffmpegが必要です。")
         print("   以下の手順でFFmpegをインストールしてください。")
         print("   Windows: ターミナルで `winget install ffmpeg` を実行し、再起動してください。")
         return False
@@ -47,27 +48,21 @@ def process_file(filepath, device):
     
     print(f"\n🎧 処理開始: {filename}")
     
-    # 1. Demucsで音源分離 (htdemucs_6sモデルを指定して6パートに分離)
-    print("🥁 ボーカル・楽器の分離を行っています... (Demucs実行)")
-    print("   ※ 初回実行時はDemucsのAIモデル(htdemucs_6s)のダウンロードが行われます。")
-    cmd = [
-        "demucs",
-        "-n", "htdemucs_6s",
-        "--device", device,
-        "-o", output_dir,
-        filepath
-    ]
+    # 1. BS-Roformerで音源分離 (6パートモデルを使用)
+    print("🥁 ボーカル・楽器の分離を行っています... (BS-Roformer実行)")
+    print("   ※ 初回実行時はAIモデルのダウンロードが行われます。")
     
-    # subprocessでDemucsを実行
-    result = subprocess.run(cmd)
-    if result.returncode != 0:
-        print(f"❌ {filename} のDemucs分離処理でエラーが発生しました。")
+    stem_dir = os.path.join(output_dir, "bs_roformer", name)
+    os.makedirs(stem_dir, exist_ok=True)
+    
+    # Python APIでaudio-separatorを実行 (6-stemの高品質BS-Roformerモデルを指定)
+    try:
+        separator = Separator(output_dir=stem_dir, output_format="WAV")
+        separator.load_model(model_filename="BS-Roformer-SW.ckpt")
+        separator.separate(filepath)
+    except Exception as e:
+        print(f"❌ {filename} の分離処理でエラーが発生しました: {e}")
         return
-        
-    stem_dir = os.path.join(output_dir, "htdemucs_6s", name)
-    if not os.path.exists(stem_dir):
-         print(f"❌ 分離されたフォルダ {stem_dir} が見つかりません。")
-         return
          
     # 2. 分離されたStemを読み込み、相対ボリュームを考慮してミックス
     print("🎛️ 音量バランスを調整してリミックスしています...")
@@ -75,10 +70,28 @@ def process_file(filepath, device):
     mixed_audio = None
     sample_rate = None
     
+    # audio-separatorの出力ファイルをマッピング
+    output_files = glob.glob(os.path.join(stem_dir, "*.wav"))
+    stem_map = {}
+    for f in output_files:
+        fname = os.path.basename(f).lower()
+        if "vocal" in fname:
+            stem_map['vocals'] = f
+        elif "drum" in fname:
+            stem_map['drums'] = f
+        elif "bass" in fname:
+            stem_map['bass'] = f
+        elif "guitar" in fname:
+            stem_map['guitar'] = f
+        elif "piano" in fname:
+            stem_map['piano'] = f
+        elif "other" in fname:
+            stem_map['other'] = f
+
     for stem_name, rel_vol in RELATIVE_VOLUMES.items():
-        stem_path = os.path.join(stem_dir, f"{stem_name}.wav")
-        if not os.path.exists(stem_path):
-            print(f"⚠️ 警告: {stem_path} が見つかりません。スキップします。")
+        stem_path = stem_map.get(stem_name)
+        if stem_path is None or not os.path.exists(stem_path):
+            print(f"⚠️ 警告: {stem_name} の音声ファイルが見つかりません。スキップします。")
             continue
             
         audio_data, sr = sf.read(stem_path)
